@@ -27,7 +27,6 @@ import dbt.task.run_operation as run_operation_task
 import dbt.task.parse as parse_task
 from dbt.profiler import profiler
 from dbt.task.list import ListTask
-from dbt.task.rpc.server import RPCServerTask
 from dbt.adapters.factory import reset_adapters, cleanup_connections
 
 import dbt.tracking
@@ -109,14 +108,6 @@ class DBTArgumentParser(argparse.ArgumentParser):
         )
 
         return mutex_group
-
-
-class RPCArgumentParser(DBTArgumentParser):
-    def exit(self, status=0, message=None):
-        if status == 0:
-            return
-        else:
-            raise TypeError(message)
 
 
 def main(args=None):
@@ -776,36 +767,6 @@ def _build_source_freshness_subparser(subparsers, base_subparser):
     return sub
 
 
-def _build_rpc_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        'rpc',
-        parents=[base_subparser],
-        help='''
-        Start a json-rpc server
-        ''',
-    )
-    sub.add_argument(
-        '--host',
-        default='0.0.0.0',
-        help='''
-        Specify the host to listen on for the rpc server.
-        ''',
-    )
-    sub.add_argument(
-        '--port',
-        default=8580,
-        type=int,
-        help='''
-        Specify the port number for the rpc server.
-        ''',
-    )
-    sub.set_defaults(cls=RPCServerTask, which='rpc', rpc_method=None)
-    # the rpc task does a 'compile', so we need these attributes to exist, but
-    # we don't want users to be allowed to set them.
-    sub.set_defaults(models=None, exclude=None)
-    return sub
-
-
 def _build_list_subparser(subparsers, base_subparser):
     sub = subparsers.add_parser(
         'list',
@@ -886,7 +847,7 @@ def _build_run_operation_subparser(subparsers, base_subparser):
     return sub
 
 
-def parse_args(args, cls=DBTArgumentParser):
+def build_parser(cls=DBTArgumentParser):
     p = cls(
         prog='dbt',
         description='''
@@ -1048,7 +1009,6 @@ def parse_args(args, cls=DBTArgumentParser):
 
     build_sub = _build_build_subparser(subs, base_subparser)
     snapshot_sub = _build_snapshot_subparser(subs, base_subparser)
-    rpc_sub = _build_rpc_subparser(subs, base_subparser)
     run_sub = _build_run_subparser(subs, base_subparser)
     compile_sub = _build_compile_subparser(subs, base_subparser)
     parse_sub = _build_parse_subparser(subs, base_subparser)
@@ -1057,7 +1017,7 @@ def parse_args(args, cls=DBTArgumentParser):
     seed_sub = _build_seed_subparser(subs, base_subparser)
     # --threads, --no-version-check
     _add_common_arguments(run_sub, compile_sub, generate_sub, test_sub,
-                          rpc_sub, seed_sub, parse_sub, build_sub)
+                          seed_sub, parse_sub, build_sub)
     # --select, --exclude
     # list_sub sets up its own arguments.
     _add_selection_arguments(
@@ -1070,6 +1030,11 @@ def parse_args(args, cls=DBTArgumentParser):
     _build_docs_serve_subparser(docs_subs, base_subparser)
     _build_source_freshness_subparser(source_subs, base_subparser)
     _build_run_operation_subparser(subs, base_subparser)
+
+    return p
+
+def parse_args(args, cls=DBTArgumentParser):
+    p = build_parser(cls)
 
     if len(args) == 0:
         p.print_help()
