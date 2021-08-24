@@ -7,6 +7,7 @@ from typing import Type, Union, Dict, Any, Optional
 
 from dbt import tracking
 from dbt import ui
+from dbt import flags
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.results import (
     NodeStatus, RunResult, collect_timing_info, RunStatus
@@ -65,6 +66,13 @@ class BaseTask(metaclass=ABCMeta):
     def pre_init_hook(cls, args):
         """A hook called before the task is initialized."""
         if args.log_format == 'json':
+            log_manager.format_json()
+        else:
+            log_manager.format_text()
+
+    @classmethod
+    def set_log_format(cls):
+        if flags.LOG_FORMAT == 'json':
             log_manager.format_json()
         else:
             log_manager.format_text()

@@ -33,7 +33,7 @@ from dbt.adapters.factory import reset_adapters, cleanup_connections
 import dbt.tracking
 
 from dbt.utils import ExitCodes
-from dbt.config import PROFILES_DIR, read_user_config
+from dbt.config import PROFILES_DIR
 from dbt.exceptions import RuntimeException, InternalException
 
 
@@ -160,17 +160,6 @@ def handle(args):
     return res
 
 
-def initialize_config_values(parsed):
-    """Given the parsed args, initialize the dbt tracking code.
-
-    It would be nice to re-use this profile later on instead of parsing it
-    twice, but dbt's intialization is not structured in a way that makes that
-    easy.
-    """
-    cfg = read_user_config(parsed.profiles_dir)
-    cfg.set_values(parsed.profiles_dir)
-
-
 @contextmanager
 def adapter_management():
     reset_adapters()
@@ -197,8 +186,6 @@ def handle_and_check(args):
             enable=profiler_enabled,
             outfile=parsed.record_timing_info
         ):
-
-            initialize_config_values(parsed)
 
             with adapter_management():
 
@@ -233,15 +220,27 @@ def track_run(task):
 
 def run_from_args(parsed):
     log_cache_events(getattr(parsed, 'log_cache_events', False))
-    flags.set_from_args(parsed)
 
-    parsed.cls.pre_init_hook(parsed)
     # we can now use the logger for stdout
+    # set log_format in the logger
+    parsed.cls.pre_init_hook(parsed)
 
     logger.info("Running with dbt{}".format(dbt.version.installed))
 
     # this will convert DbtConfigErrors into RuntimeExceptions
+    # task could be any one of the task objects
     task = parsed.cls.from_args(args=parsed)
+
+    # Set flags from args, user config, and env vars
+    # xxxTask.Runtimeconfig.UserConfig
+    user_config = None
+    if task.config is not None:
+        user_config = task.config.config
+    flags.set_from_args(parsed, user_config)
+    dbt.tracking.initialize_from_flags()
+    # Set log_format again from flags
+    parsed.cls.set_log_format()
+
     logger.debug("running dbt with arguments {parsed}", parsed=str(parsed))
 
     log_path = None
@@ -275,7 +274,8 @@ def _build_base_subparser():
 
     base_subparser.add_argument(
         '--profiles-dir',
-        default=PROFILES_DIR,
+        default=None,
+        dest='sub_profiles_dir',  # Main cli arg precedes subcommand
         type=str,
         help='''
         Which directory to look in for the profiles.yml file. Default = {}
@@ -317,15 +317,6 @@ def _build_base_subparser():
         '--log-cache-events',
         action='store_true',
         help=argparse.SUPPRESS,
-    )
-
-    base_subparser.add_argument(
-        '--bypass-cache',
-        action='store_false',
-        dest='use_cache',
-        help='''
-        If set, bypass the adapter-level cache of database state
-        ''',
     )
 
     base_subparser.set_defaults(defer=None, state=None)
@@ -620,7 +611,7 @@ def _add_table_mutability_arguments(*subparsers):
 def _add_version_check(sub):
     sub.add_argument(
         '--no-version-check',
-        dest='version_check',
+        dest='sub_version_check',  # main cli arg precedes subcommands
         action='store_false',
         help='''
         If set, skip ensuring dbt's version matches the one specified in
@@ -968,12 +959,10 @@ def parse_args(args, cls=DBTArgumentParser):
     )
 
     p.add_argument(
-        '-S',
-        '--strict',
-        action='store_true',
+        '--printer-width',
+        dest='printer_width',
         help='''
-        Run schema validations at runtime. This will surface bugs in dbt, but
-        may incur a performance penalty.
+        Sets the width of terminal output
         '''
     )
 
@@ -985,6 +974,16 @@ def parse_args(args, cls=DBTArgumentParser):
         include --models that selects nothing, deprecations, configurations
         with no associated models, invalid test configurations, and missing
         sources/refs in tests.
+        '''
+    )
+
+    p.add_argument(
+        '--no-version-check',
+        dest='version_check',
+        action='store_false',
+        help='''
+        If set, skip ensuring dbt's version matches the one specified in
+        the dbt_project.yml file ('require-dbt-version')
         '''
     )
 
@@ -1010,16 +1009,6 @@ def parse_args(args, cls=DBTArgumentParser):
         help=argparse.SUPPRESS,
     )
 
-    # if set, extract all models and blocks with the jinja block extractor, and
-    # verify that we don't fail anywhere the actual jinja parser passes. The
-    # reverse (passing files that ends up failing jinja) is fine.
-    # TODO remove?
-    p.add_argument(
-        '--test-new-parser',
-        action='store_true',
-        help=argparse.SUPPRESS
-    )
-
     # if set, will use the tree-sitter-jinja2 parser and extractor instead of
     # jinja rendering when possible.
     p.add_argument(
@@ -1027,6 +1016,25 @@ def parse_args(args, cls=DBTArgumentParser):
         action='store_true',
         help='''
         Uses an experimental parser to extract jinja values.
+        '''
+    )
+
+    p.add_argument(
+        '--profiles-dir',
+        default=PROFILES_DIR,
+        dest='profiles_dir',
+        type=str,
+        help='''
+        Which directory to look in for the profiles.yml file. Default = {}
+        '''.format(PROFILES_DIR)
+    )
+
+    p.add_argument(
+        '--no-anonymous-usage-stats',
+        action='store_false',
+        dest='send_anonymous_usage_stats',
+        help='''
+        Do not send anonymous usage stat to dbt Labs
         '''
     )
 
@@ -1077,8 +1085,14 @@ def parse_args(args, cls=DBTArgumentParser):
 
     parsed = p.parse_args(args)
 
-    if hasattr(parsed, 'profiles_dir'):
-        parsed.profiles_dir = os.path.abspath(parsed.profiles_dir)
+    # profiles_dir is set before subcommands and after, so normalize
+    sub_profiles_dir = getattr(parsed, 'sub_profiles_dir', None)
+    profiles_dir = sub_profiles_dir if sub_profiles_dir else parsed.profiles_dir
+    parsed.profiles_dir = os.path.abspath(profiles_dir)
+
+    # version_check is set before subcommands and after, so normalize
+    if getattr(parsed, 'sub_version_check', None) is False:
+        parsed.version_check = False
 
     if getattr(parsed, 'project_dir', None) is not None:
         expanded_user = os.path.expanduser(parsed.project_dir)

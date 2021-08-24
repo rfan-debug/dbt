@@ -45,8 +45,6 @@ class BaseDependencyTest(DBTIntegrationTest):
         }
 
     def run_dbt(self, *args, **kwargs):
-        strict = kwargs.pop('strict', False)
-        kwargs['strict'] = strict
         return super().run_dbt(*args, **kwargs)
 
 
@@ -115,12 +113,9 @@ class TestMissingDependency(DBTIntegrationTest):
 
     @use_profile('postgres')
     def test_postgres_missing_dependency(self):
-        # dbt should raise a dbt exception, not raise a parse-time TypeError.
-        with self.assertRaises(dbt.exceptions.Exception) as exc:
-            self.run_dbt(['compile'], strict=False)
-        message = str(exc.exception)
-        self.assertIn('no_such_dependency', message)
-        self.assertIn('is undefined', message)
+        # dbt should raise a runtime exception
+        with self.assertRaises(dbt.exceptions.RuntimeException) as exc:
+            self.run_dbt(['compile'])
 
 
 class TestSimpleDependencyWithSchema(TestSimpleDependency):
@@ -244,11 +239,6 @@ class TestSimpleDependencyDuplicateName(DBTIntegrationTest):
                 }
             ]
         }
-
-    def run_dbt(self, *args, **kwargs):
-        strict = kwargs.pop('strict', False)
-        kwargs['strict'] = strict
-        return super().run_dbt(*args, **kwargs)
 
     @use_profile('postgres')
     def test_postgres_local_dependency_same_name(self):

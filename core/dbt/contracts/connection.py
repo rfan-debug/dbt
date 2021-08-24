@@ -176,9 +176,6 @@ class UserConfigContract(Protocol):
     partial_parse: Optional[bool] = None
     printer_width: Optional[int] = None
 
-    def set_values(self, cookie_dir: str) -> None:
-        ...
-
 
 class HasCredentials(Protocol):
     credentials: Credentials
