@@ -1033,6 +1033,7 @@ def build_parser(cls=DBTArgumentParser):
 
     return p
 
+
 def parse_args(args, cls=DBTArgumentParser):
     p = build_parser(cls)
 
