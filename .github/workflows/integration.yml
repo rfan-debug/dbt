@@ -242,8 +242,15 @@ jobs:
           name: integration_results_${{ matrix.python-version }}_${{ matrix.os }}_${{ matrix.adapter }}-${{ steps.date.outputs.date }}.csv
           path: integration_results.csv
 
-  require-label-comment:
+  require-pr-label-comment:
     runs-on: ubuntu-latest
+
+    # if skipped tests because triggered by a PR from a forked repository
+    if: >-
+      always() &&
+      needs.test.result == 'skipped' &&
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository
 
     needs: test
 
@@ -251,16 +258,25 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Needs permission PR comment
-        if: >-
-          needs.test.result == 'skipped' &&
-          github.event_name == 'pull_request_target' &&
-          github.event.pull_request.head.repo.full_name != github.repository
-        uses: unsplash/comment-on-pr@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find Existing Comment
+        uses: peter-evans/find-comment@v1
+        id: fc
         with:
-          msg: |
-            "You do not have permissions to run integration tests, @dbt-labs/core "\
-            "needs to label this PR with `ok to test` in order to run integration tests!"
-          check_for_duplicate_msg: true
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: You currently do not have permissions to run integration tests
+
+      - name: Create or update comment
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: >-
+            You currently do not have permissions to run integration tests. @dbt-labs/core
+            needs to label this PR with the `ok to test` label in order to run integration tests.
+          edit-mode: replace
+
+      - uses: AveryCameronUofR/add-reviewer-gh-action@1.0.3
+        with:
+          reviewers: "dbt-labs/core"
+          token: ${{ secrets.GITHUB_TOKEN }}
