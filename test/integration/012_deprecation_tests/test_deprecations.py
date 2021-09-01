@@ -24,6 +24,10 @@ class TestDeprecations(BaseTestDeprecations):
         return self.dir("models")
 
     @use_profile('postgres')
+    def test_postgres_deprecations_fail(self):
+        self.run_dbt(['--warn-error', 'run'], expect_pass=False)
+
+    @use_profile('postgres')
     def test_postgres_deprecations(self):
         self.assertEqual(deprecations.active_deprecations, set())
         self.run_dbt()
@@ -42,6 +46,11 @@ class TestMaterializationReturnDeprecation(BaseTestDeprecations):
             'config-version': 2,
             'macro-paths': [self.dir('custom-materialization-macros')],
         }
+
+    @use_profile('postgres')
+    def test_postgres_deprecations_fail(self):
+        # this should fail at runtime
+        self.run_dbt(['--warn-error', 'run'], expect_pass=False)
 
     @use_profile('postgres')
     def test_postgres_deprecations(self):
@@ -69,6 +78,14 @@ class TestAdapterMacroDeprecation(BaseTestDeprecations):
         self.run_dbt()
         expected = {'adapter-macro'}
         self.assertEqual(expected, deprecations.active_deprecations)
+
+    @use_profile('postgres')
+    def test_postgres_adapter_macro_fail(self):
+        self.assertEqual(deprecations.active_deprecations, set())
+        with self.assertRaises(dbt.exceptions.CompilationException) as exc:
+            self.run_dbt(['--warn-error', 'run'])
+        exc_str = ' '.join(str(exc.exception).split())  # flatten all whitespace
+        assert 'The "adapter_macro" macro has been deprecated' in exc_str
 
     @use_profile('redshift')
     def test_redshift_adapter_macro(self):
@@ -106,6 +123,14 @@ class TestAdapterMacroDeprecationPackages(BaseTestDeprecations):
         self.run_dbt()
         expected = {'adapter-macro'}
         self.assertEqual(expected, deprecations.active_deprecations)
+
+    @use_profile('postgres')
+    def test_postgres_adapter_macro_pkg_fail(self):
+        self.assertEqual(deprecations.active_deprecations, set())
+        with self.assertRaises(dbt.exceptions.CompilationException) as exc:
+            self.run_dbt(['--warn-error', 'run'])
+        exc_str = ' '.join(str(exc.exception).split())  # flatten all whitespace
+        assert 'The "adapter_macro" macro has been deprecated' in exc_str
 
     @use_profile('redshift')
     def test_redshift_adapter_macro_pkg(self):
@@ -155,3 +180,10 @@ class TestDispatchPackagesDeprecation(BaseTestDeprecations):
         expected = {'dispatch-packages'}
         self.assertEqual(expected, deprecations.active_deprecations)
 
+    @use_profile('postgres')
+    def test_postgres_adapter_macro_fail(self):
+        self.assertEqual(deprecations.active_deprecations, set())
+        with self.assertRaises(dbt.exceptions.CompilationException) as exc:
+            self.run_dbt(['--warn-error', 'run'])
+        exc_str = ' '.join(str(exc.exception).split())  # flatten all whitespace
+        assert 'Raised during dispatch for: string_literal' in exc_str
