@@ -385,6 +385,7 @@ def _build_build_subparser(subparsers, base_subparser):
     sub.add_argument(
         '-x',
         '--fail-fast',
+        dest='sub_fail_fast',
         action='store_true',
         help='''
         Stop execution upon a first failure.
@@ -488,6 +489,7 @@ def _build_run_subparser(subparsers, base_subparser):
     run_sub.add_argument(
         '-x',
         '--fail-fast',
+        dest='sub_fail_fast',
         action='store_true',
         help='''
         Stop execution upon a first failure.
@@ -706,6 +708,7 @@ def _build_test_subparser(subparsers, base_subparser):
     sub.add_argument(
         '-x',
         '--fail-fast',
+        dest='sub_fail_fast',
         action='store_true',
         help='''
         Stop execution upon a first test failure.
@@ -1038,6 +1041,16 @@ def parse_args(args, cls=DBTArgumentParser):
         '''
     )
 
+    p.add_argument(
+        '-x',
+        '--fail-fast',
+        dest='fail_fast',
+        action='store_true',
+        help='''
+        Stop execution upon a first failure.
+        '''
+    )
+
     subs = p.add_subparsers(title="Available sub-commands")
 
     base_subparser = _build_base_subparser()
@@ -1086,13 +1099,23 @@ def parse_args(args, cls=DBTArgumentParser):
     parsed = p.parse_args(args)
 
     # profiles_dir is set before subcommands and after, so normalize
-    sub_profiles_dir = getattr(parsed, 'sub_profiles_dir', None)
-    profiles_dir = sub_profiles_dir if sub_profiles_dir else parsed.profiles_dir
-    parsed.profiles_dir = os.path.abspath(profiles_dir)
+    if hasattr(parsed, 'sub_profiles_dir'):
+        if parsed.sub_profiles_dir is not None:
+            parsed.profiles_dir = parsed.sub_profiles_dir
+            parsed.profiles_dir = os.path.abspath(parsed.profiles_dir)
+        delattr(parsed, 'sub_profiles_dir')
 
     # version_check is set before subcommands and after, so normalize
-    if getattr(parsed, 'sub_version_check', None) is False:
-        parsed.version_check = False
+    if hasattr(parsed, 'sub_version_check'):
+        if parsed.sub_version_check is False:
+            parsed.version_check = False
+        delattr(parsed, 'sub_version_check')
+
+    # fail_fast is set before subcommands and after, so normalize
+    if hasattr(parsed, 'sub_fail_fast'):
+        if parsed.sub_fail_fast is True:
+            parsed.fail_fast = True
+        delattr(parsed, 'sub_fail_fast')
 
     if getattr(parsed, 'project_dir', None) is not None:
         expanded_user = os.path.expanduser(parsed.project_dir)

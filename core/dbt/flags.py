@@ -25,7 +25,9 @@ FAIL_FAST = None
 SEND_ANONYMOUS_USAGE_STATS = None
 PRINTER_WIDTH = None
 
-# Global CLI defaults
+# Global CLI defaults. These flags are set from three places:
+# CLI args, environment variables, and user_config (profiles.yml).
+# Environment variables use the pattern 'DBT_{flag name}', like DBT_PROFILES_DIR
 flag_defaults = {
     "USE_EXPERIMENTAL_PARSER": False,
     "WARN_ERROR": False,
@@ -106,6 +108,7 @@ def get_flag_value(flag, args, user_config):
     lc_flag = flag.lower()
     flag_value = getattr(args, lc_flag, None)
     if flag_value is None:
+        # Environment variables use pattern 'DBT_{flag name}'
         env_flag = f"DBT_{flag}"
         env_value = os.getenv(env_flag)
         if env_value is not None:
