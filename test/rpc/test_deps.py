@@ -113,7 +113,7 @@ def test_rpc_deps_packages(project_root, profiles_root, dbt_profile, unique_sche
 
         # now break the project
         project.packages['packages'] = bad_packages
-        project.write_packages(project_dir, remove=True)
+        project.write_packages(project_root, remove=True)
 
         # queries should still work because we haven't reloaded
         tok1 = querier.is_async_result(querier.run())
@@ -130,7 +130,7 @@ def test_rpc_deps_packages(project_root, profiles_root, dbt_profile, unique_sche
 
         # fix packages again
         project.packages['packages'] = packages
-        project.write_packages(project_dir, remove=True)
+        project.write_packages(project_root, remove=True)
         # keep queries broken, we haven't run deps yet
         querier.is_error(querier.run())
 
@@ -172,9 +172,6 @@ def test_rpc_deps_after_list(project_root, profiles_root, dbt_profile, unique_sc
         # the status should be an error as deps wil not be defined
         querier.is_result(querier.status())
 
-        # list should pass
-        querier.async_wait_for_result(querier.list())
-
         # deps should pass
         querier.async_wait_for_result(querier.deps())
 
@@ -184,3 +181,9 @@ def test_rpc_deps_after_list(project_root, profiles_root, dbt_profile, unique_sc
 
         querier.is_result(querier.async_wait(tok2))
         querier.is_result(querier.async_wait(tok1))
+
+        # list should pass
+        querier.list()
+
+        # deps should pass
+        querier.async_wait_for_result(querier.deps())
